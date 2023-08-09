@@ -8,12 +8,19 @@ Add this repository URL to the Unity Package Manager.
 
 ```csharp
 var installReferrerClient = new InstallReferrerClient();
-var installReferrerRequest = installReferrerClient.GetInstallReferrerAsync();
-yield return installReferrerRequest;
+var installReferrerTask = installReferrerClient.GetInstallReferrerAsync();
+await installReferrerTask.ContinueWith(task => {
+    if (!task.IsCompletedSuccessfully) return;
 
-if (installReferrerRequest.ResponseCode == InstallReferrerResponse.Ok) {
-    var details = installReferrerRequest.InstallReferrerDetails;
-}
+    var details = task.Result;
+    Debug.Log($"Install referrer: {details.InstallReferrer}");
+    Debug.Log($"Referrer click timestamp: {details.ReferrerClickTimestampSeconds}");
+    Debug.Log($"Install begin timestamp: {details.InstallBeginTimestampSeconds}");
+    Debug.Log($"Referrer click timestamp server: {details.ReferrerClickTimestampServerSeconds}");
+    Debug.Log($"Install begin timestamp server: {details.InstallBeginTimestampServerSeconds}");
+    Debug.Log($"Install version: {details.InstallVersion}");
+    Debug.Log($"Google play instant param: {details.GooglePlayInstantParam}");
+});
 ```
 
 ## How to Modify This Package

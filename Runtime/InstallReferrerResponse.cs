@@ -1,5 +1,3 @@
-using System;
-
 namespace PrimePeaks.InstallReferrer {
     
     public enum InstallReferrerResponse {
