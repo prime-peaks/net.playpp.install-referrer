@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -16,25 +17,17 @@ namespace PrimePeaks.InstallReferrer {
         
         public Task<InstallReferrerDetails> GetInstallReferrerAsync() {
             var tsc = new TaskCompletionSource<InstallReferrerDetails>();
+            var scheduler = TaskScheduler.FromCurrentSynchronizationContext();
             
             client.Call("startConnection", new InstallReferrerStateListener(
                 code => {
                     var responseCode = (InstallReferrerResponse) code;
                     if (responseCode == InstallReferrerResponse.Ok) {
-                        var details = client.Call<AndroidJavaObject>("getInstallReferrer");
-                        tsc.SetResult(new InstallReferrerDetails {
-                            InstallReferrer = details.Call<string>("getInstallReferrer"),
-                            ReferrerClickTimestampSeconds = details.Call<long>("getReferrerClickTimestampSeconds"),
-                            InstallBeginTimestampSeconds = details.Call<long>("getInstallBeginTimestampSeconds"),
-                            ReferrerClickTimestampServerSeconds = details.Call<long>("getReferrerClickTimestampServerSeconds"),
-                            InstallBeginTimestampServerSeconds = details.Call<long>("getInstallBeginTimestampServerSeconds"),
-                            InstallVersion = details.Call<string>("getInstallVersion"),
-                            GooglePlayInstantParam = details.Call<bool>("getGooglePlayInstantParam")
-                        });
+                        GetInstallReferrer(tsc, scheduler);
                     } else {
                         tsc.SetException(new InstallReferrerException(responseCode));
+                        EndConnection();
                     }
-                    client.Call("endConnection");
                 },
                 () => {
                     if (tsc.Task.Result != null) return;
@@ -43,6 +36,41 @@ namespace PrimePeaks.InstallReferrer {
             ));
             
             return tsc.Task;
+        }
+
+        private void GetInstallReferrer(TaskCompletionSource<InstallReferrerDetails> tsc, TaskScheduler scheduler) {
+            Task.Run(() => {
+                try {
+                    AndroidJNI.AttachCurrentThread();
+                    var details = client.Call<AndroidJavaObject>("getInstallReferrer");
+                    tsc.SetResult(new InstallReferrerDetails {
+                        InstallReferrer = details.Call<string>("getInstallReferrer"),
+                        ReferrerClickTimestampSeconds = details.Call<long>("getReferrerClickTimestampSeconds"),
+                        InstallBeginTimestampSeconds = details.Call<long>("getInstallBeginTimestampSeconds"),
+                        ReferrerClickTimestampServerSeconds = details.Call<long>("getReferrerClickTimestampServerSeconds"),
+                        InstallBeginTimestampServerSeconds = details.Call<long>("getInstallBeginTimestampServerSeconds"),
+                        InstallVersion = details.Call<string>("getInstallVersion"),
+                        GooglePlayInstantParam = details.Call<bool>("getGooglePlayInstantParam")
+                    });
+                } finally {
+                    AndroidJNI.DetachCurrentThread();
+                }
+            }).ContinueWith(task => {
+                EndConnection();
+                if (!task.IsFaulted) return;
+
+                tsc.SetException(task.Exception is { InnerException: {} }
+                    ? task.Exception.InnerException
+                    : new InstallReferrerException(InstallReferrerResponse.Unknown));
+            }, scheduler);
+        }
+
+        private void EndConnection() {
+            try {
+                client.Call("endConnection");
+            } catch (Exception e) {
+                Debug.LogError($"Failed to end connection with Install Referrer service: {e.Message}");
+            }
         }
 
         public void Dispose() {

@@ -20,7 +20,7 @@ await installReferrerTask.ContinueWith(task => {
     Debug.Log($"Install begin timestamp server: {details.InstallBeginTimestampServerSeconds}");
     Debug.Log($"Install version: {details.InstallVersion}");
     Debug.Log($"Google play instant param: {details.GooglePlayInstantParam}");
-});
+}, TaskScheduler.FromCurrentSynchronizationContext());
 ```
 
 ## How to Modify This Package
